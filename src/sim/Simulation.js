@@ -10,7 +10,7 @@ const approach = (v, target, step) => (v < target ? Math.min(target, v + step) :
 const damp = (v, target, k, dt) => v + (target - v) * (1 - Math.exp(-k * dt));
 
 // 各状态下连接的“健康度”目标值（影响颜色、颤抖、粗细）
-const HEALTH = { absent: 0, growing: 0.8, up: 1, degraded: 0.3, down: 0.4, blocked: 0.6, retracting: 0.35 };
+const HEALTH = { absent: 0, growing: 0.8, up: 1, degraded: 0.32, down: 0.12, blocked: 0.5, retracting: 0.25 };
 
 export const HUE_PROBE = 0;
 export const HUE_VOTE = 1;
@@ -134,11 +134,6 @@ export class Simulation {
   }
   log(text, tone = 'info') {
     this.emit('log', { text, tone, time: this.time });
-  }
-  /** 沿连接方向推一下节点（渲染层据此让胶质球晃动）。toward = true 表示朝连接另一端 */
-  kick(link, nodeIndex, power, toward = true) {
-    const sign = (nodeIndex === link.a ? 1 : -1) * (toward ? 1 : -1);
-    this.emit('kick', { node: nodeIndex, dx: link.dir[0] * sign, dz: link.dir[1] * sign, power });
   }
 
   // ---------------------------------------------------------------- helpers
@@ -267,7 +262,7 @@ export class Simulation {
       n.downTimer = downtime;
       n.agent.running = false;
       n.reachable = false;
-      this.log(`${n.name}（${n.sub}）失去响应，塌成一滩`, 'bad');
+      this.log(`${n.name}（${n.sub}）失去响应，肉体开始萎缩`, 'bad');
       for (const i of n.links) {
         const l = this.links[i];
         if (l.state === 'absent') continue;
@@ -285,7 +280,7 @@ export class Simulation {
     } else {
       n.agent.timer = rand(1.5, 4);
       n.reachable = true;
-      this.log(`${n.name} 重新苏醒，开始向网络伸出细丝`, 'good');
+      this.log(`${n.name} 重新苏醒，开始向网络伸出触须`, 'good');
       for (const i of n.links) {
         const l = this.links[i];
         if (l.state === 'down' && l.reason === 'node') l.timer = rand(0.8, 3.2);
@@ -312,9 +307,6 @@ export class Simulation {
     l.reason = reason;
     l.timer = downtime;
     l.failing = false;
-    // 绷紧的丝一断，两端各自弹开
-    this.kick(l, l.a, 2.0, false);
-    this.kick(l, l.b, 2.0, false);
   }
 
   _retract(l) {
@@ -368,13 +360,11 @@ export class Simulation {
           if (arrived) {
             if (l.failing) {
               l.failing = false;
-              this.log(`${this.linkName(l)} 打洞失败，细丝缩回`, 'warn');
+              this.log(`${this.linkName(l)} 打洞失败，触须缩回`, 'warn');
               this._retract(l);
             } else {
               l.state = 'up';
               l.reason = '';
-              this.kick(l, l.a, 1.1, true);
-              this.kick(l, l.b, 1.1, true);
               this.log(`${this.linkName(l)} 已接通 · ${fmtBw(l.bwBase)}`, 'good');
               this.emit('link', l);
             }
@@ -404,7 +394,7 @@ export class Simulation {
           l.timer -= dt;
           if (l.timer <= 0) {
             if (l.kind === 'p2p' && l.reason === 'flap' && Math.random() < 0.12) {
-              this.log(`${this.linkName(l)} 放弃重连，残丝被回收`, 'dim');
+              this.log(`${this.linkName(l)} 放弃重连，肌腱被网络回收`, 'dim');
               this._retract(l);
             } else {
               this._regrow(l);
@@ -418,7 +408,7 @@ export class Simulation {
             l.tA = l.tB = l.cut;
             l.rate = 0.05;
             l.state = 'growing';
-            this.log(`GFW 对 ${this.nodes[l.a].name} 的封锁解除，连接重新愈合`, 'good');
+            this.log(`GFW 对 ${this.nodes[l.a].name} 的封锁解除，触手重新愈合`, 'good');
           }
           break;
         default:
@@ -488,7 +478,6 @@ export class Simulation {
     if (!node.online) return;
     // 光从连接进入的那一侧扫过整个节点
     const sign = idx === l.a ? 1 : -1;
-    this.kick(l, idx, 0.22, false);
     node.flashes.push({ dx: l.dir[0] * sign, dz: l.dir[1] * sign, t: 0, hue: p.hue });
     if (node.flashes.length > 2) node.flashes.shift();
     const wave = p.wave;
@@ -529,8 +518,6 @@ export class Simulation {
       if (x.pos >= 1) {
         const node = this.nodes[this.other(l, seg.from)];
         node.gulp = Math.max(node.gulp, x.kind === 'core' ? 1.3 : 0.5 + 0.5 * x.size);
-        // 鼓包撞进球里，把它往前推一下
-        this.kick(l, node.index, x.kind === 'core' ? 2.6 : 0.5 + 0.7 * x.size, false);
         x.hop++;
         x.pos = 0;
         if (x.hop >= x.route.length) {
@@ -582,12 +569,6 @@ export class Simulation {
       this._spawnPulse(l, l.b, wave, Math.random() * 0.5);
     }
     if (wave.active === 0) this.waves.delete(wave.id);
-    // 全网一颤
-    for (const n of this.nodes) {
-      if (!n.online) continue;
-      const a = Math.random() * 6.283;
-      this.emit('kick', { node: n.index, dx: Math.cos(a), dz: Math.sin(a), power: 0.9 });
-    }
     this.emit('election', c);
     return true;
   }
@@ -630,12 +611,12 @@ export class Simulation {
           const route = host.online ? this.findRoute(c.host, winner) : null;
           const name = this.nodes[winner].name;
           if (route && route.length) {
-            this.log(`${name} 赢得第 ${c.term} 任期，核心沿连接迁移（${route.length} 跳）`, 'core');
+            this.log(`${name} 赢得第 ${c.term} 任期，心脏沿管道迁移（${route.length} 跳）`, 'core');
             c.phase = 'sinking';
             c.timer = 0.75;
             c.route = route;
           } else {
-            this.log(`${name} 赢得第 ${c.term} 任期，旧核心消散，新核心就地凝结`, 'core');
+            this.log(`${name} 赢得第 ${c.term} 任期，旧核心枯萎，新核心就地生长`, 'core');
             c.phase = 'withering';
             c.timer = 1.1;
           }
@@ -654,7 +635,7 @@ export class Simulation {
               c.transfer = null;
             },
             onFail: () => {
-              this.log('迁移途中连接断裂，核心在新宿主体内重新凝结', 'core');
+              this.log('迁移途中管道断裂，核心在新宿主体内重新凝结', 'core');
               c.host = c.winner;
               c.phase = 'forming';
               c.timer = 2.2;
@@ -746,7 +727,7 @@ export class Simulation {
     if (!pool.length) return;
     const l = pick(pool);
     if (forceSnap || Math.random() < 0.5) {
-      this.log(`${this.linkName(l)} 物理链路中断，连接被扯断`, 'bad');
+      this.log(`${this.linkName(l)} 物理链路中断，管道被扯断`, 'bad');
       this._snap(l, 'flap', rand(5, 11));
     } else {
       l.state = 'degraded';
@@ -772,13 +753,13 @@ export class Simulation {
         l.tA = rand(0.3, 0.4);
         l.tB = 1 - l.tA;
       }
-      this.log(`${this.linkName(l)} 开始打洞，双方各伸出一根细丝`, 'info');
+      this.log(`${this.linkName(l)} 开始打洞，双方各伸出一根触须`, 'info');
       this.emit('link', l);
     } else {
       const pool = present.filter((l) => l.state === 'up');
       if (pool.length <= 3) return;
       const l = pick(pool);
-      this.log(`${this.linkName(l)} 长期空闲，连接被回收`, 'dim');
+      this.log(`${this.linkName(l)} 长期空闲，肌腱被回收`, 'dim');
       this._retract(l);
       this.emit('link', l);
     }
@@ -793,7 +774,7 @@ export class Simulation {
     const dur = rand(9, 15);
     for (const l of victims) this._block(l, dur + rand(-2, 2));
     this.log(
-      wide ? 'GFW 大范围封锁：境内节点到公网中继的直连全部被截断' : `GFW 拦截了 ${this.nodes[victims[0].a].name} → 公网中继`,
+      wide ? 'GFW 大范围封锁：境内节点到公网中继的触手全部被截断' : `GFW 拦截了 ${this.nodes[victims[0].a].name} → 公网中继`,
       'gfw',
     );
     this.emit('gfw', victims);

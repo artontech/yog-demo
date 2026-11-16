@@ -228,7 +228,7 @@ export class Hud {
     const host = sim.core.host;
     world.views.forEach((v, i) => {
       const el = this.tags[i];
-      const lift = host === i ? 1.7 * sim.core.emerge : 0;
+      const lift = host === i ? 1.9 * sim.core.emerge : 0;
       const p = v.top;
       const ok = world.project({ x: p.x, y: p.y + 0.35 + lift, z: p.z }, pt);
       el.style.display = ok ? '' : 'none';

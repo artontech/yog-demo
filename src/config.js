@@ -49,17 +49,14 @@ export const TASKS = [
   '巡检日志异常',
 ];
 
-// 调色板：主体全是黑亮的胶质，颜色只出现在轮廓光和自发光上
+// 调色板（线性空间下都压得很暗，靠高光和自发光出效果）
 export const PALETTE = {
   fog: 0x040809,
-  probe: [0.18, 1.0, 0.78], // 探测脉冲 / 智能体运行：青
+  probe: [0.18, 1.0, 0.78], // 探测脉冲：青色生物荧光
   vote: [1.0, 0.08, 0.04], // 选举 / 核心：暗红
-  data: [0.5, 0.74, 1.0], // 数据鼓包：冷白蓝
+  data: [0.72, 0.95, 0.22], // 数据：胆汁黄绿
   gfw: [1.0, 0.36, 0.08], // GFW：火橙
   warn: [1.0, 0.62, 0.12],
-  p2p: [0.2, 1.0, 0.78], // 点对点连接的轮廓色
-  cs: [0.66, 0.42, 1.0], // 客户端→服务器连接的轮廓色
-  relay: [0.6, 0.4, 1.0], // 公网中继的槽光
 };
 
 export function pickQuality() {
@@ -76,11 +73,13 @@ export function pickQuality() {
     low,
     maxDpr: low ? 1.6 : 2,
     msaa: low ? 0 : 4,
-    blobDetail: low ? 14 : 24,
-    sinewSeg: low ? 30 : 48,
-    sinewRad: low ? 10 : 14,
+    blobDetail: low ? 14 : 26,
+    sinewSeg: low ? 36 : 64,
+    sinewRad: low ? 8 : 12,
     strands: low ? 2 : 3,
-    spores: low ? 140 : 360,
+    cilia: low ? 5 : 8,
+    spores: low ? 160 : 420,
     field: low ? 256 : 512,
+    giants: low ? 5 : 8,
   };
 }

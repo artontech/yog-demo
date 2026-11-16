@@ -1,4 +1,4 @@
-// 氛围：深渊天穹、漂浮的浮尘。
+// 氛围：深渊天穹、漂浮的孢子。
 
 import * as THREE from 'three';
 import { NOISE } from './glsl.js';

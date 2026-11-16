@@ -6,6 +6,7 @@ import { Sinew } from './Sinew.js';
 import { Heart } from './Heart.js';
 import { Mat } from './Mat.js';
 import { Barrier } from './Barrier.js';
+import { makeGiants } from './Tentacles.js';
 import { makeSky, makeSpores } from './Atmosphere.js';
 
 const _v = new THREE.Vector3();
@@ -43,9 +44,8 @@ export class World {
     scene.add(this.sky);
     this.spores = makeSpores(q.spores, shared);
     scene.add(this.spores);
-
-    // 仿真里的“受力”事件 → 胶质球的晃动
-    sim.on('kick', ({ node, dx, dz, power }) => this.views[node].kick(dx, dz, power));
+    this.giants = makeGiants(q.giants, shared);
+    scene.add(this.giants);
 
     this.update(0.016);
     this.mat.prewarm(sim, this.views, this.sinews, this.heart);
@@ -56,29 +56,7 @@ export class World {
     const time = sim.time;
     shared.uTime.value = time;
 
-    // 果冻物理：每个球是一根弹簧，连通的连接把晃动传给邻居，整张网会一起颤
-    for (const v of views) {
-      v.pullX = 0;
-      v.pullZ = 0;
-    }
-    for (const s of sinews) {
-      const l = s.link;
-      if (l.gB - l.gA > 0.004 || l.state === 'absent') continue;
-      const a = views[l.a];
-      const b = views[l.b];
-      const k = 5 + 14 * s.radius; // 越粗的连接拉得越紧
-      const fx = (b.lean.x - a.lean.x) * k;
-      const fz = (b.lean.y - a.lean.y) * k;
-      a.pullX += fx;
-      a.pullZ += fz;
-      b.pullX -= fx;
-      b.pullZ -= fz;
-    }
-    const step = Math.min(dt, 0.033);
-    for (const v of views) {
-      v.integrate(step, v.pullX, v.pullZ);
-      v.update(dt, time, sim.core);
-    }
+    for (const v of views) v.update(dt, time, sim.core);
 
     // 把脉冲和传输分配到各条管道的 uniform 槽位里
     for (const s of sinews) s.resetSlots();
@@ -88,23 +66,21 @@ export class World {
       const t = seg.from === seg.link.a ? x.pos : 1 - x.pos;
       // 两端渐入渐出，避免鼓包凭空出现
       const edge = Math.min(1, Math.min(x.pos, 1 - x.pos) * 9 + 0.25);
-      if (x.kind === 'core') s.addBulge(t, (0.3 + s.radius * 0.5) * x.amp * edge, 0.7 + s.radius, 1);
-      else s.addBulge(t, Math.min(0.3, 0.06 + 0.1 * x.size + s.radius * 0.45) * x.amp * edge, 0.3 + 0.25 * x.size + s.radius * 0.9, 0);
+      if (x.kind === 'core') s.addBulge(t, (0.3 + s.radius * 0.6) * x.amp * edge, 0.7, 1);
+      else s.addBulge(t, (0.07 + 0.12 * x.size + s.radius * 0.55) * x.amp * edge, 0.34 + 0.3 * x.size, 0);
     }
     for (const p of sim.pulses) {
       if (p.pos < 0) continue;
       const l = p.link;
       const t = p.from === l.a ? p.pos : 1 - p.pos;
       const fade = Math.min(1, p.pos * 10 + 0.2);
-      // 粗的连接发光面积大，亮度相应压低，免得辉光糊成一片
-      const s = sinews[l.index];
-      s.addPulse(t, ((p.hue === 1 ? 0.6 : 0.8) * fade) / (1 + 2.2 * s.radius), 0.36, p.hue);
+      sinews[l.index].addPulse(t, (p.hue === 1 ? 0.8 : 1.15) * fade, 0.5, p.hue);
     }
     for (const s of sinews) s.update(dt, time);
 
     for (const [index, b] of this.barriers) b.update(dt, time, sim.links[index], sinews[index]);
 
-    this.heart.update(dt, time, sim.core, views, sinews, this.stage.camera);
+    this.heart.update(dt, time, sim.core, views, sinews);
     this.mat.update(dt, sim, views, sinews, this.heart);
 
     const cam = this.stage.camera;
@@ -129,7 +105,7 @@ export class World {
     let best = null;
     let bestD = Infinity;
     for (const v of this.views) {
-      _v.set(v.body.x, v.centerY, v.body.z);
+      _v.set(v.pos.x, v.centerY, v.pos.z);
       const c = _v.clone();
       if (!this.project(c, pt) || !this.project(v.top, top)) continue;
       const rad = Math.max(18, Math.hypot(top.x - pt.x, top.y - pt.y) * 1.25);
