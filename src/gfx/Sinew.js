@@ -1,6 +1,7 @@
 // 连接：共生体一样的粘性管道。
 //   · 粗细 = 可用带宽
 //   · P2P 是两端粗、中间细的对称肌腱；客户端→服务器是从客户端伸出、尖端吸附在服务器上的渐细触手
+//   · 活的：中心线小幅蠕动、截面来回拧转、整根缓慢呼吸；与节点相连处是一段平滑的粗喇叭口，跟着节点一起涨缩
 //   · 数据传输 = 沿管道移动的鼓包；探测 = 扫过的光脉冲
 //   · 断开时从中间扯断，两截残肢垂落、蠕动，之后重新生长
 // 整条管道是参数网格，位置在顶点着色器里沿三次贝塞尔曲线展开，所以端点可以随节点自由移动。
@@ -65,6 +66,7 @@ uniform float uHealth;
 uniform float uSeed;
 uniform float uTime;
 uniform float uDroop;
+uniform vec2 uBreathEnds; // 两端节点此刻的呼吸值（-1..1）
 uniform vec4 uBulge[${MAX_BULGE}];
 varying float vT;
 varying float vAng;
@@ -81,9 +83,31 @@ vec3 yBezD(float t) {
   return 3.0 * k * k * (uP1 - uP0) + 6.0 * k * t * (uP2 - uP1) + 3.0 * t * t * (uP3 - uP2);
 }
 float yOpen() { return smoothstep(0.0, 0.02, uGap.y - uGap.x); }
+// 活力：健康的管道动得舒展，劣化 / 断开的只剩一点抽动
+float yLive() { return 0.3 + 0.7 * uHealth; }
+
+// 蠕动：两组频率不同的波沿管道传播，让中心线小幅度地左右、上下游走；两端平滑收拢，接口不动
+vec3 yWrithe(float t, vec3 N, vec3 B) {
+  float s = t * uLen;
+  float env = smoothstep(0.0, 0.3, t) * smoothstep(0.0, 0.3, 1.0 - t);
+  float amp = (0.05 + 0.22 * uRadius) * yLive() * env;
+  float a = sin(s * 1.6 - uTime * 1.15 + uSeed * 30.0) + 0.5 * sin(s * 0.7 + uTime * 0.6 + uSeed * 11.0);
+  float b = sin(s * 1.2 + uTime * 0.9 + uSeed * 47.0) + 0.5 * sin(s * 2.3 - uTime * 1.4 + uSeed * 5.0);
+  return (N * a + B * (b * 0.6)) * amp;
+}
+
+// 扭动：截面绕中心线来回拧转，拧的角度沿长度变化，所以看起来像一股被拧着的肉绳
+float yTwist(float t) {
+  float s = t * uLen;
+  return yLive() * (0.75 * sin(s * 0.5 - uTime * 0.5 + uSeed * 20.0) + 0.45 * sin(s * 0.21 + uTime * 0.27 + uSeed * 9.0));
+}
 
 vec3 yCenter(float t, float hf, float strand) {
   vec3 c = yBez(t);
+  vec3 T = normalize(yBezD(t) + vec3(1e-6, 0.0, 0.0));
+  vec3 N = normalize(cross(vec3(0.0, 1.0, 0.0), T) + vec3(1e-5, 0.0, 0.0));
+  vec3 B = cross(T, N);
+  c += yWrithe(t, N, B);
   float open = yOpen();
   // 断开后：残肢越靠近断口越下垂、越扭动
   float k = hf < 0.5 ? t / max(uGap.x, 0.001) : (1.0 - t) / max(1.0 - uGap.y, 0.001);
@@ -97,11 +121,8 @@ vec3 yCenter(float t, float hf, float strand) {
   float tr = 1.0 - uHealth;
   c += tr * tr * 0.035 * vec3(sin(uTime * 31.0 + t * 40.0), sin(uTime * 27.0 + t * 33.0 + 1.0), sin(uTime * 29.0 + t * 37.0 + 2.0));
   if (strand > 0.5) {
-    // 缠绕在主干外的粘丝
-    vec3 T = normalize(yBezD(t));
-    vec3 N = normalize(cross(vec3(0.0, 1.0, 0.0), T) + vec3(1e-5, 0.0, 0.0));
-    vec3 B = cross(T, N);
-    float a = strand * 2.4 + uSeed * 6.283 + t * (4.0 + strand * 1.3) + uTime * 0.12;
+    // 缠绕在主干外的粘丝，跟着主干一起拧
+    float a = strand * 2.4 + uSeed * 6.283 + t * (4.0 + strand * 1.3) + uTime * 0.12 + yTwist(t);
     float env = pow(max(sin(3.14159 * t), 0.0), 0.6);
     float off = (uRadius * 1.5 + 0.05 + 0.05 * strand) * env * (0.7 + 0.5 * sin(t * 7.0 + strand * 3.0 + uSeed * 5.0));
     c += (N * cos(a) + B * sin(a)) * off;
@@ -112,19 +133,35 @@ vec3 yCenter(float t, float hf, float strand) {
 
 float yRad(float t, float ang, float hf, float strand, out vec2 bulge) {
   float R = uRadius;
-  float e = min(t, 1.0 - t);
+  // 与节点相连处：一段又长又平滑的喇叭口（起止两头坡度都是 0），明显比管身粗，像从节点里长出来的根
+  float fl = 1.5 + R * 3.0;
+  float f0 = 1.0 - smoothstep(0.0, fl, t * uLen);
+  float f1 = 1.0 - smoothstep(0.0, fl, (1.0 - t) * uLen);
+  f0 *= f0;
+  f1 *= f1;
+  // 根部跟着它所连的节点一起涨缩
+  float root0 = f0 * (1.0 + 0.25 * uBreathEnds.x);
+  float root1 = f1 * (1.0 + 0.25 * uBreathEnds.y);
   float r;
   if (uKind < 0.5) {
-    r = R * (0.7 + 0.8 * pow(abs(2.0 * t - 1.0), 2.4));
-    r += (R * 0.9 + 0.1) * exp(-e * uLen * 1.5);
+    r = R * (0.74 + 0.5 * pow(abs(2.0 * t - 1.0), 2.4));
+    r += (R * 1.15 + 0.15) * (root0 + root1);
   } else {
-    r = R * mix(1.4, 0.6, smoothstep(0.0, 0.92, t));
-    r += (R * 0.9 + 0.1) * exp(-t * uLen * 1.5);
-    r += (R * 1.2 + 0.07) * exp(-(1.0 - t) * uLen * 3.2);
-    r *= 1.0 + 0.08 * sin(t * uLen * 5.0 - uTime * 3.2) * uHealth;
+    r = R * mix(1.35, 0.62, smoothstep(0.0, 0.92, t));
+    r += (R * 1.0 + 0.15) * root0;
+    r += (R * 1.3 + 0.13) * root1;
+    r *= 1.0 + 0.06 * sin(t * uLen * 5.0 - uTime * 3.2) * uHealth;
   }
+  // 缓慢的呼吸：整根管子一涨一缩，吸气慢、呼气快，相位沿长度略有先后；靠近节点的一段改为跟随节点的呼吸
+  float ph = uTime * 0.95 + uSeed * 6.283 - t * uLen * 0.3;
+  float breath = sin(ph - 0.4 * sin(ph));
+  breath = mix(breath, uBreathEnds.x, f0);
+  breath = mix(breath, uBreathEnds.y, f1);
+  r *= 1.0 + 0.11 * yLive() * breath;
   float n = yNoise(vec3(t * uLen * 0.9 + uSeed * 17.0, cos(ang) * 0.8, sin(ang) * 0.8 + uTime * 0.05));
   r *= 0.8 + 0.42 * n;
+  // 截面不是正圆而是略带三道棱，这样拧转的时候才看得出来
+  if (strand < 0.5) r *= 1.0 + 0.09 * cos(3.0 * ang + uSeed * 6.283);
   bulge = vec2(0.0);
   for (int i = 0; i < ${MAX_BULGE}; i++) {
     vec4 b = uBulge[i];
@@ -161,8 +198,14 @@ vec2 yBgT;
 float yR0 = yRad(yT, yAng, aHalf, yStr, yBg);
 float yRa = yRad(yT - 0.012, yAng, aHalf, yStr, yBgT);
 float yRb = yRad(yT + 0.012, yAng, aHalf, yStr, yBgT);
-vec3 yRing = yNn * cos(yAng) + yBn * sin(yAng);
-vec3 objectNormal = normalize(yRing - yTan * ((yRb - yRa) / yDl));
+// 截面整体拧一个角度：表面的棱、纤维和纹路都跟着转
+float ySa = yAng + (yStr < 0.5 ? yTwist(yT) : 0.0);
+vec3 yRing = yNn * cos(ySa) + yBn * sin(ySa);
+vec3 yTang = yBn * cos(ySa) - yNn * sin(ySa);
+// 三道棱带来的周向坡度（解析求导），让棱上的高光是对的
+float yLb = 3.0 * yAng + uSeed * 6.283;
+float yLobe = yStr < 0.5 ? -0.27 * sin(yLb) / (1.0 + 0.09 * cos(yLb)) : 0.0;
+vec3 objectNormal = normalize(yRing - yTang * yLobe - yTan * ((yRb - yRa) / yDl));
 vT = yT;
 vAng = yAng;
 vStrand = yStr;
@@ -289,6 +332,7 @@ export class Sinew {
       uHealth: { value: link.health },
       uSeed: { value: link.seed },
       uDroop: { value: 0.5 },
+      uBreathEnds: { value: new THREE.Vector2() },
       uColBody: { value: cs ? new THREE.Color(0.03, 0.02, 0.05) : new THREE.Color(0.016, 0.034, 0.032) },
       uColMark: { value: cs ? new THREE.Color(0.62, 0.38, 1.0) : new THREE.Color(0.2, 1.0, 0.75) },
       uColData: { value: new THREE.Color(...PALETTE.data) },
@@ -396,6 +440,7 @@ export class Sinew {
     u.uLen.value = this.length;
     u.uGap.value.set(link.gA, link.gB);
     u.uHealth.value = link.health;
+    u.uBreathEnds.value.set(this.viewA.node.agent.breath, this.viewB.node.agent.breath);
     u.uDroop.value = Math.max(0.2, (this.p[0].y + this.p[3].y) * 0.5 + Math.max(link.lift, 0) * 0.9);
     for (let i = this.nBulge; i < MAX_BULGE; i++) u.uBulge.value[i].set(0, 0, 1, 0);
     for (let i = this.nPulse; i < MAX_PULSE; i++) u.uPulse.value[i].set(0, 0, 1, 0);
