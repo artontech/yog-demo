@@ -224,12 +224,18 @@ const FRAG_EMISSIVE = /* glsl */ `
   // 一点带色的轮廓光，让黑色的管道在黑色的背景上也能读出粗细
   float yRim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.5);
   yE += uColMark * yRim * 0.03 * (0.3 + 0.7 * uHealth);
-  // 方向纹：客户端→服务器是朝服务器蠕动的人字纹；P2P 是静止的对称菱形纹
+  // 方向纹。P2P 是静止的对称菱形纹；
+  // 客户端→服务器的人字纹不铺满整根触手，而是三三两两、明暗不一、时有时无地朝服务器游过去
   float yOff = (1.0 - yCs.y) * 0.5;
   float yPh = vT * uLen * 1.15;
-  float yChev = yBandF(fract(yPh + yOff * 0.6 - uTime * 0.6));
+  float yFlow = yPh + yOff * 0.6 - uTime * (0.45 + 0.3 * fract(uSeed * 7.3)); // 每根触手流速略有不同
+  float yRing = floor(yFlow);                                                  // 每一道纹的编号，随它一起移动
+  float yRnd = yHash12(vec2(yRing, uSeed * 91.7));                             // 这一道纹自己的随机数
+  float yGroup = smoothstep(0.42, 0.58, yNoise(vec3(yRing * 0.31 + uSeed * 17.0, 0.0, 0.0))); // 成群出现，群与群之间留白
+  float yAwake = smoothstep(0.22, 0.42, yNoise(vec3(uTime * 0.13 + uSeed * 31.0, 0.0, 0.0))); // 整根触手时亮时灭
+  float yChev = yBandF(fract(yFlow)) * yGroup * step(0.35, yRnd) * (0.35 + 0.9 * yRnd) * yAwake;
   float yLat = max(yBandF(fract(yPh + yOff * 0.6)), yBandF(fract(yPh - yOff * 0.6))) * (0.55 + 0.45 * sin(uTime * 0.9 + vT * 6.0));
-  yE += uColMark * mix(yLat * 0.55, yChev, uKind) * 0.085 * uHealth * uHealth * yMain;
+  yE += uColMark * mix(yLat * 0.047, yChev * 0.13, uKind) * uHealth * uHealth * yMain;
   for (int i = 0; i < ${MAX_PULSE}; i++) {
     vec4 p = uPulse[i];
     float d = (vT - p.x) * uLen / max(p.z, 0.001);
