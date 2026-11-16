@@ -115,7 +115,7 @@ const FRAG_EMISSIVE = /* glsl */ `
   float yIn = 0.5 + 0.5 * uBreath;
   float yRim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.0);
   // 智能体运行：血管随呼吸发出青色荧光
-  yE += uColGlow * uAgent * (yVein * (0.03 + 0.2 * yIn) + yRim * 0.02 * yIn);
+  yE += uColGlow * uAgent * mix(1.0, 0.55, uServer) * (yVein * (0.03 + 0.2 * yIn) + yRim * 0.02 * yIn);
   // 控制核心寄宿：血管随心跳泛红
   float yNear = smoothstep(-0.2, 0.9, yD.y); // 越靠近头顶的心脏越红
   yE += vec3(1.0, 0.05, 0.03) * uCore * yNear * (yVein * (0.1 + 0.6 * uBeat) + yRim * 0.03 * uBeat);
@@ -155,7 +155,7 @@ export class NodeView {
     const mixv = (Math.sin(node.seed * 12.9898) * 0.5 + 0.5) * 0.6;
     const colA = server ? new THREE.Color(0.032, 0.03, 0.036) : new THREE.Color(0.018, 0.04, 0.034).lerp(new THREE.Color(0.03, 0.034, 0.02), mixv);
     const colB = server ? new THREE.Color(0.012, 0.012, 0.018) : new THREE.Color(0.042, 0.02, 0.058).lerp(new THREE.Color(0.02, 0.022, 0.05), mixv);
-    const colTip = server ? new THREE.Color(0.2, 0.18, 0.16) : new THREE.Color(0.17, 0.2, 0.09).lerp(new THREE.Color(0.2, 0.15, 0.12), mixv);
+    const colTip = server ? new THREE.Color(0.12, 0.11, 0.105) : new THREE.Color(0.17, 0.2, 0.09).lerp(new THREE.Color(0.2, 0.15, 0.12), mixv);
 
     const u = (this.uniforms = {
       uTime: shared.uTime,

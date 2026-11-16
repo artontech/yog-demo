@@ -240,7 +240,7 @@ export class Mat {
       const t = p.from === l.a ? p.pos : 1 - p.pos;
       sinews[l.index].pointAt(t, _pt);
       if (p.hue === 1) this._blob(_pt.x, _pt.z, 0.9, '0,0,255', 0.5);
-      else this._blob(_pt.x, _pt.z, 1.15, '0,255,0', 0.85);
+      else this._blob(_pt.x, _pt.z, 0.9, '0,255,0', 0.6);
     }
     // 核心的血：浸透宿主周围，迁移途中沿管道留下一道红痕
     const core = sim.core;

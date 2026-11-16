@@ -111,7 +111,9 @@ export class Stage {
     controls.zoomSpeed = 0.8;
     controls.minPolarAngle = 0.25;
     controls.maxPolarAngle = 1.42;
-    controls.autoRotate = true;
+    // 系统开启“减少动态效果”时不自动巡游
+    this.autoTour = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    controls.autoRotate = this.autoTour;
     controls.autoRotateSpeed = 0.32;
     // 交互时暂停自动巡游，松手几秒后恢复
     this.idle = 0;
@@ -232,7 +234,7 @@ export class Stage {
     }
     if (!this.interacting && !this.controls.autoRotate) {
       this.idle += dt;
-      if (this.idle > 5) this.controls.autoRotate = true;
+      if (this.idle > 5 && this.autoTour) this.controls.autoRotate = true;
     }
     this.controls.update(dt);
     this.grade.uniforms.uTime.value = time;

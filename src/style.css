@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --ink: #030607;
   --glass: rgba(6, 13, 13, 0.62);
   --line: rgba(92, 255, 217, 0.16);
@@ -15,6 +16,9 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
+  /* 两侧留白：至少 16px，并避开手机侧边的系统栏 */
+  --gut-l: max(16px, env(safe-area-inset-left, 0px));
+  --gut-r: max(16px, env(safe-area-inset-right, 0px));
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     'Noto Sans CJK SC', monospace;
   --serif: 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', STSong, SimSun, Georgia, serif;
@@ -87,8 +91,8 @@ body {
 #title {
   position: absolute;
   top: calc(14px + var(--safe-t));
-  left: calc(18px + var(--safe-l));
-  right: calc(18px + var(--safe-r));
+  left: var(--gut-l);
+  right: var(--gut-r);
 }
 #title h1 {
   margin: 0;
@@ -255,7 +259,7 @@ body {
 /* ------------------------------------------------------------ 事件日志 */
 #log {
   position: absolute;
-  left: calc(18px + var(--safe-l));
+  left: var(--gut-l);
   bottom: calc(18px + var(--safe-b));
   width: min(430px, 44vw);
   display: flex;
@@ -269,6 +273,7 @@ body {
 #log p:nth-last-child(n + 5) { opacity: 0.45; }
 #log p:nth-last-child(n + 7) { opacity: 0.22; }
 #log p {
+  flex: none;
   margin: 0;
   padding: 1.5px 0;
   white-space: nowrap;
@@ -289,7 +294,7 @@ body {
 /* ------------------------------------------------------------ 操作按钮 */
 #actions {
   position: absolute;
-  right: calc(18px + var(--safe-r));
+  right: var(--gut-r);
   bottom: calc(18px + var(--safe-b));
   display: grid;
   grid-template-columns: repeat(2, auto);
@@ -355,7 +360,7 @@ body {
 #legend {
   position: absolute;
   top: calc(14px + var(--safe-t));
-  right: calc(18px + var(--safe-r));
+  right: var(--gut-r);
   width: 268px;
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -511,8 +516,8 @@ body {
 @media (max-width: 720px) {
   #title {
     top: calc(10px + var(--safe-t));
-    left: calc(12px + var(--safe-l));
-    right: calc(12px + var(--safe-r));
+    left: var(--gut-l);
+    right: var(--gut-r);
   }
   #title h1 {
     font-size: 16px;
@@ -547,7 +552,7 @@ body {
     display: flex;
     grid-template-columns: none;
     gap: 6px;
-    padding: 8px calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l));
+    padding: 8px var(--gut-r) calc(10px + var(--safe-b)) var(--gut-l);
     overflow-x: auto;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
@@ -566,8 +571,8 @@ body {
   }
 
   #log {
-    left: calc(12px + var(--safe-l));
-    right: calc(12px + var(--safe-r));
+    left: var(--gut-l);
+    right: var(--gut-r);
     bottom: calc(60px + var(--safe-b));
     width: auto;
     font-size: 10.5px;
@@ -577,8 +582,8 @@ body {
 
   #inspector {
     top: auto;
-    left: calc(10px + var(--safe-l));
-    right: calc(10px + var(--safe-r));
+    left: var(--gut-l);
+    right: var(--gut-r);
     bottom: calc(60px + var(--safe-b));
     width: auto;
     background: rgba(5, 12, 12, 0.92);
@@ -590,8 +595,8 @@ body {
     display: none;
   }
   #legend {
-    left: calc(10px + var(--safe-l));
-    right: calc(10px + var(--safe-r));
+    left: var(--gut-l);
+    right: var(--gut-r);
     bottom: calc(60px + var(--safe-b));
     width: auto;
     max-height: calc(100% - 150px - var(--safe-t) - var(--safe-b));
@@ -624,7 +629,7 @@ body {
   #legend {
     bottom: auto;
     top: calc(10px + var(--safe-t));
-    right: calc(18px + var(--safe-r));
+    right: var(--gut-r);
     max-height: calc(100% - 20px);
     overflow-y: auto;
   }
