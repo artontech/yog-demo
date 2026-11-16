@@ -66,11 +66,11 @@ function buildEnvironment(renderer) {
     m.scale.setScalar(size);
     scene.add(m);
   };
-  lamp(0xa8ffe6, 6, [8, 34, -14], 8);
-  lamp(0x7a5cff, 6, [-34, 12, 18], 7);
-  lamp(0xdfeee8, 5, [26, 16, 26], 4);
-  lamp(0x2f7d6c, 3, [-14, 26, -34], 10);
-  lamp(0x4a2a6a, 3, [30, 6, -30], 9);
+  lamp(0xdfe9ff, 7, [6, 40, -10], 11); // 头顶的大柔光：黑亮表面上那块主高光
+  lamp(0x8fd8ff, 5, [-34, 14, 20], 6);
+  lamp(0x7a5cff, 5, [30, 10, 28], 6);
+  lamp(0x2f8f7c, 3, [-16, 22, -34], 9);
+  lamp(0x3a3f6a, 3, [32, 6, -28], 9);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const tex = pmrem.fromScene(scene, 0.035).texture;
   pmrem.dispose();
@@ -96,7 +96,7 @@ export class Stage {
     const scene = (this.scene = new THREE.Scene());
     scene.fog = new THREE.FogExp2(PALETTE.fog, 0.021);
     scene.environment = buildEnvironment(renderer);
-    scene.environmentIntensity = 0.45;
+    scene.environmentIntensity = 0.75;
 
     const camera = (this.camera = new THREE.PerspectiveCamera(40, 1, 0.3, 500));
     this.target = new THREE.Vector3(0.3, 0.4, 1.6);
@@ -128,14 +128,14 @@ export class Stage {
     });
 
     // ---- 灯光
-    scene.add(new THREE.HemisphereLight(0x1a302e, 0x040404, 0.45));
-    const key = new THREE.DirectionalLight(0xb4dccf, 0.8);
+    scene.add(new THREE.HemisphereLight(0x1c2a36, 0x040404, 0.4));
+    const key = new THREE.DirectionalLight(0xcfe0f5, 0.9);
     key.position.set(-6, 14, -9);
     scene.add(key);
     this.wisps = [
-      { light: new THREE.PointLight(0x2affc4, 15, 34, 1.8), r: 12, h: 5.5, speed: 0.11, phase: 0 },
-      { light: new THREE.PointLight(0x8a4bff, 16, 34, 1.8), r: 14, h: 4.2, speed: -0.083, phase: 2.4 },
-      { light: new THREE.PointLight(0xfff0dc, 12, 30, 1.8), r: 6, h: 9, speed: 0.05, phase: 4.1 },
+      { light: new THREE.PointLight(0x7fe9ff, 9, 40, 1.8), r: 13, h: 12, speed: 0.11, phase: 0 },
+      { light: new THREE.PointLight(0x9a78ff, 9, 40, 1.8), r: 15, h: 11, speed: -0.083, phase: 2.4 },
+      { light: new THREE.PointLight(0xf2f6ff, 9, 40, 1.8), r: 7, h: 15, speed: 0.05, phase: 4.1 },
     ];
     if (q.low) this.wisps.pop(); // 移动端少算一盏灯
     for (const w of this.wisps) scene.add(w.light);
@@ -145,7 +145,7 @@ export class Stage {
     const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples });
     const composer = (this.composer = new EffectComposer(renderer, rt));
     composer.addPass(new RenderPass(scene, camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.5, 0.5, 0.85);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.42, 0.5, 0.95);
     composer.addPass(this.bloom);
     this.grade = new ShaderPass(GradeShader);
     composer.addPass(this.grade);

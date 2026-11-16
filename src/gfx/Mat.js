@@ -1,11 +1,11 @@
-// 菌毯：铺在地面上的黏菌薄膜。
-// 做法：每秒十来次把“此刻哪里应该有生物质”画进一张 2D canvas（R = 菌毯、G = 脉冲余辉、B = 核心的血），
-// 再用一个乒乓缓冲在 GPU 上做时间平滑和扩散 —— 于是菌毯会沿着新连接慢慢爬过去，断开后又慢慢干涸。
-// 地面着色器采样这张场，叠加噪声得到不规则的边缘、叶脉和脓疱。
+// 菌毯：铺在地面上的一层黑色胶质，把所有节点和连接垫在同一摊液体里。
+// 做法：每秒十来次把“此刻哪里应该有胶质”画进一张 2D canvas（R = 胶质、G = 脉冲余辉、B = 核心的红光），
+// 再用一个乒乓缓冲在 GPU 上做时间平滑和扩散 —— 于是胶质会沿着新连接慢慢漫过去，断开后又慢慢退走。
+// 地面着色器对这张场取阈值，得到像液滴融合一样圆润的边缘，并直接从场的梯度算出液面法线。
 
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { NOISE, BUMP, patchMaterial } from './glsl.js';
+import { NOISE, patchMaterial } from './glsl.js';
 import { PALETTE } from '../config.js';
 
 const SIZE = 48; // 场覆盖的世界范围（正方形边长）
@@ -55,7 +55,7 @@ export class Mat {
 
     // ---- 乒乓缓冲
     const gl = renderer.getContext();
-    const floatOk = renderer.capabilities.isWebGL2 !== false && (gl.getExtension('EXT_color_buffer_half_float') || gl.getExtension('EXT_color_buffer_float'));
+    const floatOk = gl.getExtension('EXT_color_buffer_half_float') || gl.getExtension('EXT_color_buffer_float');
     const opts = {
       type: floatOk ? THREE.HalfFloatType : THREE.UnsignedByteType,
       format: THREE.RGBAFormat,
@@ -90,12 +90,12 @@ export class Mat {
       uField: { value: this.rtA.texture },
       uFieldC: { value: new THREE.Vector2(...CENTER) },
       uFieldS: { value: SIZE },
+      uTexel: { value: 1.6 / this.res },
       uGlow: { value: new THREE.Color(...PALETTE.probe) },
     };
     const material = patchMaterial(new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0 }), {
-      key: `yog-mat-${q.tier}`,
+      key: 'yog-mat',
       uniforms: this.uniforms,
-      defines: q.low ? ['YOG_LITE'] : [],
       vertexPars: 'varying vec2 vGp;',
       vertexPosition: 'vec3 transformed = vec3(position);\nvGp = (modelMatrix * vec4(position, 1.0)).xz;',
       fragmentPars: /* glsl */ `
@@ -104,49 +104,52 @@ export class Mat {
         uniform sampler2D uField;
         uniform vec2 uFieldC;
         uniform float uFieldS;
+        uniform float uTexel;
         uniform vec3 uGlow;
         varying vec2 vGp;
         ${NOISE}
-        ${BUMP}
+        // 胶质的厚度：对场取阈值，边缘窄、往里渐渐鼓起
+        float yThick(vec2 uv, float bias) {
+          float v = texture2D(uField, uv).r + bias;
+          return smoothstep(0.2, 0.3, v) * 0.45 + smoothstep(0.22, 0.85, v) * 0.55;
+        }
       `,
       fragmentColor: /* glsl */ `
         vec2 yG = vGp;
-        float yDist = length(vViewPosition);
-        vec2 yWarp = vec2(yNoise(vec3(yG * 0.33, uTime * 0.03)), yNoise(vec3(yG * 0.33 + 5.2, uTime * 0.03 + 9.1))) - 0.5;
-        vec2 yFuv = (yG + yWarp * 1.5 - uFieldC) / uFieldS + 0.5;
+        // 轻微的缓慢扰动，让边缘不是死板的等距线
+        vec2 yWarp = vec2(yNoise(vec3(yG * 0.3, uTime * 0.03)), yNoise(vec3(yG * 0.3 + 5.2, uTime * 0.03 + 9.1))) - 0.5;
+        vec2 yFuv = (yG + yWarp * 0.9 - uFieldC) / uFieldS + 0.5;
         vec3 yFld = texture2D(uField, yFuv).rgb;
-        float yN1 = yFbm(vec3(yG * 0.8, uTime * 0.02));
-        float yN2 = yNoise(vec3(yG * 3.7, 1.3));
-        float yBio = smoothstep(0.14, 0.46, yFld.r + (yN1 - 0.5) * 0.3);
-        // 叶脉：粗脉 + 毛细
-        float yVein = yVeins(vec3(yG * 0.62 + yWarp * 1.2, uTime * 0.012 + 4.0), 6.0) * yBio;
-        float yPust = 0.0;
-        #ifndef YOG_LITE
-          float yW = yWorley2(yG * 1.2 + yWarp);
-          yPust = smoothstep(0.42, 0.06, yW) * smoothstep(0.3, 0.75, yFld.r + yN1 * 0.25);
-        #endif
-        float yHt = yBio * (0.3 + 0.5 * yN1) + yVein * 0.45 + yPust * 0.9 + (1.0 - yBio) * yN2 * 0.1;
-        vec3 yRock = vec3(0.011, 0.014, 0.015) * (0.55 + 0.9 * yN2);
-        vec3 ySlime = mix(vec3(0.02, 0.042, 0.034), vec3(0.04, 0.024, 0.052), smoothstep(0.35, 0.7, yN1));
-        ySlime = mix(ySlime, vec3(0.1, 0.115, 0.055), yPust * 0.55);
-        ySlime = mix(ySlime, vec3(0.085, 0.009, 0.012), clamp(yFld.b * 1.3, 0.0, 0.85));
-        ySlime *= 1.0 - 0.5 * yVein;
-        diffuseColor.rgb = mix(yRock, ySlime, yBio);
+        float yBias = (yNoise(vec3(yG * 0.55, uTime * 0.025 + 3.0)) - 0.5) * 0.1;
+        float yH = yThick(yFuv, yBias);
+        float yGoo = smoothstep(0.0, 0.12, yH);
+        // 液面法线直接取厚度场的梯度：平滑，不依赖屏幕分辨率
+        float yHx = yThick(yFuv + vec2(uTexel, 0.0), yBias) - yThick(yFuv - vec2(uTexel, 0.0), yBias);
+        float yHz = yThick(yFuv + vec2(0.0, uTexel), yBias) - yThick(yFuv - vec2(0.0, uTexel), yBias);
+        float yGrain = yNoise(vec3(yG * 3.1, 1.3));
+        vec3 yFloor = vec3(0.012, 0.014, 0.016) * (0.6 + 0.8 * yGrain);
+        diffuseColor.rgb = mix(yFloor, vec3(0.009, 0.01, 0.013), yGoo);
       `,
       fragmentRoughness: /* glsl */ `
-        roughnessFactor = mix(0.62, mix(0.4, 0.2, yN1), yBio) - yPust * 0.04;
+        roughnessFactor = mix(0.72, 0.3, yGoo);
       `,
       fragmentNormal: /* glsl */ `
-        normal = yBump(normal, -vViewPosition, yHt, 0.15 / (1.0 + yDist * 0.05));
+        {
+          float yAmp = 0.11 / (uTexel * uFieldS);
+          vec3 yNw = normalize(vec3(-yHx * yAmp, 1.0, -yHz * yAmp));
+          normal = normalize((viewMatrix * vec4(yNw, 0.0)).xyz);
+        }
       `,
       fragmentEmissive: /* glsl */ `
         {
-          vec3 yE = uGlow * (yVein * (0.012 + yFld.g * 0.75) + yFld.g * yBio * 0.035);
-          yE += vec3(1.0, 0.05, 0.03) * yFld.b * (yVein * (0.12 + 0.6 * uBeat) + 0.012 * uBeat);
+          // 脉冲经过后留在液面上的余辉；核心周围一圈随心跳起伏的红晕
+          vec3 yE = uGlow * yFld.g * yGoo * 0.07;
+          yE += vec3(1.0, 0.05, 0.03) * yFld.b * yGoo * (0.012 + 0.05 * uBeat);
           totalEmissiveRadiance += yE;
         }
       `,
     });
+    material.envMapIntensity = 0.55; // 地面太大，反射压一压，免得整片发灰
     this.mesh = new THREE.Mesh(new THREE.CircleGeometry(95, 48), material);
     this.mesh.rotation.x = -Math.PI / 2;
 
@@ -162,6 +165,7 @@ export class Mat {
       r.clear();
     }
     r.setRenderTarget(prev);
+    r.setClearColor(PALETTE.fog, 1);
   }
 
   _px(x) {
@@ -217,17 +221,18 @@ export class Mat {
 
     for (const v of views) {
       const n = v.node;
-      const life = 0.35 + 0.65 * n.vital;
-      this._blob(v.pos.x, v.pos.z, v.r * (2.9 + 0.5 * n.agent.level) * life, '255,0,0', 0.95);
+      const life = 0.45 + 0.55 * n.vital;
+      this._blob(v.pos.x, v.pos.z, v.r * (2.7 + 0.4 * n.agent.level) * life, '255,0,0', 0.95);
       for (const f of n.flashes) {
-        if (f.hue === 0 && f.t < 0.9) this._blob(v.pos.x, v.pos.z, v.r * 3.0, '0,255,0', 0.3 * (1 - f.t));
+        if (f.hue === 0 && f.t < 0.9) this._blob(v.pos.x, v.pos.z, v.r * 2.8, '0,255,0', 0.3 * (1 - f.t));
       }
     }
     for (const s of sinews) {
       const l = s.link;
       if (l.state === 'absent') continue;
-      const w = s.radius * 3.2 + 0.85;
-      const a = 0.55 + 0.45 * l.health;
+      // 越粗的连接，身下的胶质也越宽；细丝身下只有窄窄一道
+      const w = s.radius * 4.6 + 0.3;
+      const a = 0.5 + 0.5 * l.health;
       if (l.gB - l.gA < 0.004) this._stroke(s, 0, 1, w, a);
       else {
         this._stroke(s, 0, l.gA, w, a);
@@ -242,11 +247,11 @@ export class Mat {
       if (p.hue === 1) this._blob(_pt.x, _pt.z, 0.9, '0,0,255', 0.5);
       else this._blob(_pt.x, _pt.z, 0.9, '0,255,0', 0.6);
     }
-    // 核心的血：浸透宿主周围，迁移途中沿管道留下一道红痕
+    // 核心的红晕：罩着宿主，迁移途中沿连接留下一道红痕
     const core = sim.core;
     if (core.emerge > 0.02) {
       const host = views[core.host];
-      this._blob(host.pos.x, host.pos.z, host.r * 3.4 + 1.6, '0,0,255', 0.9 * core.emerge);
+      this._blob(host.pos.x, host.pos.z, host.r * 3.0 + 1.4, '0,0,255', 0.9 * core.emerge);
     }
     if (core.phase === 'transit') this._blob(heart.lightPos.x, heart.lightPos.z, 1.5, '0,0,255', 0.9);
     this.target.needsUpdate = true;
@@ -258,7 +263,7 @@ export class Mat {
       this.timer = 0.09;
       this._draw(sim, views, sinews, heart);
     }
-    // 菌毯长得慢、退得更慢；脉冲余辉来得快去得也快；血迹居中
+    // 胶质漫得慢、退得更慢；脉冲余辉来得快去得也快；红晕居中
     const k = (rate) => 1 - Math.exp(-rate * dt);
     const f = this.feedback.uniforms;
     f.uUp.value.set(k(0.55), k(14), k(1.2));
@@ -273,7 +278,7 @@ export class Mat {
     this.uniforms.uField.value = this.rtA.texture;
   }
 
-  /** 开场时直接让菌毯处于“已经长好”的状态 */
+  /** 开场时直接让胶质处于“已经铺好”的状态 */
   prewarm(sim, views, sinews, heart) {
     this._draw(sim, views, sinews, heart);
     for (let i = 0; i < 24; i++) this.update(0.6, sim, views, sinews, heart);

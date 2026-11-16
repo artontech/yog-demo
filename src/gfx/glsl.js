@@ -7,21 +7,12 @@ float yHash12(vec2 p) {
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
-vec2 yHash22(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.xx + p3.yz) * p3.zy);
-}
 float yHash13(vec3 p3) {
   p3 = fract(p3 * 0.1031);
   p3 += dot(p3, p3.zyx + 31.32);
   return fract((p3.x + p3.y) * p3.z);
 }
-vec3 yHash33(vec3 p3) {
-  p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
-  p3 += dot(p3, p3.yxz + 33.33);
-  return fract((p3.xxy + p3.yxx) * p3.zyx);
-}
+// 平滑的值噪声，范围 0..1
 float yNoise(vec3 p) {
   vec3 i = floor(p);
   vec3 f = fract(p);
@@ -36,24 +27,6 @@ float yNoise(vec3 p) {
   float k = yHash13(i + vec3(1.0, 1.0, 1.0));
   return mix(mix(mix(a, b, u.x), mix(c, d, u.x), u.y), mix(mix(e, g, u.x), mix(h, k, u.x), u.y), u.z);
 }
-// 梯度噪声：用于叶脉 / 血管，避免值噪声那种沿网格的方块感。范围约 [-0.6, 0.6]
-float yGDot(vec3 i, vec3 f, vec3 o) { return dot(yHash33(i + o) * 2.0 - 1.0, f - o); }
-float yGNoise(vec3 p) {
-  vec3 i = floor(p);
-  vec3 f = fract(p);
-  vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-  return mix(
-    mix(mix(yGDot(i, f, vec3(0.0, 0.0, 0.0)), yGDot(i, f, vec3(1.0, 0.0, 0.0)), u.x),
-        mix(yGDot(i, f, vec3(0.0, 1.0, 0.0)), yGDot(i, f, vec3(1.0, 1.0, 0.0)), u.x), u.y),
-    mix(mix(yGDot(i, f, vec3(0.0, 0.0, 1.0)), yGDot(i, f, vec3(1.0, 0.0, 1.0)), u.x),
-        mix(yGDot(i, f, vec3(0.0, 1.0, 1.0)), yGDot(i, f, vec3(1.0, 1.0, 1.0)), u.x), u.y),
-    u.z);
-}
-// 噪声零值线构成的细脉网络
-float yVeins(vec3 p, float sharp) {
-  float g = yGNoise(p) + 0.45 * yGNoise(p * 2.13 + vec3(7.1, 1.3, 4.2));
-  return pow(clamp(1.0 - abs(g) * 2.4, 0.0, 1.0), sharp);
-}
 float yFbm(vec3 p) {
   float s = 0.0;
   float a = 0.5;
@@ -63,35 +36,6 @@ float yFbm(vec3 p) {
     a *= 0.5;
   }
   return s / 0.875;
-}
-// 细胞噪声：返回到最近特征点的距离
-float yWorley(vec3 p) {
-  vec3 i = floor(p);
-  vec3 f = fract(p);
-  float d = 1.0;
-  for (int x = -1; x <= 1; x++) {
-    for (int y = -1; y <= 1; y++) {
-      for (int z = -1; z <= 1; z++) {
-        vec3 g = vec3(float(x), float(y), float(z));
-        vec3 r = g + yHash33(i + g) - f;
-        d = min(d, dot(r, r));
-      }
-    }
-  }
-  return sqrt(d);
-}
-float yWorley2(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float d = 1.0;
-  for (int x = -1; x <= 1; x++) {
-    for (int y = -1; y <= 1; y++) {
-      vec2 g = vec2(float(x), float(y));
-      vec2 r = g + yHash22(i + g) - f;
-      d = min(d, dot(r, r));
-    }
-  }
-  return sqrt(d);
 }
 `;
 
