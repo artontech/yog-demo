@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#030607" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>YOG · 共生体网络</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="stage" aria-label="智能体共生网络"></canvas>
+
+      <div id="hud">
+        <div id="labels"></div>
+
+        <header id="title">
+          <h1><span class="sigil">⟁</span>YOG<i>·</i>共生体网络</h1>
+          <p id="stats"></p>
+        </header>
+
+        <section id="log" aria-live="polite"></section>
+
+        <aside id="inspector" hidden></aside>
+
+        <aside id="legend" hidden>
+          <h2>图例</h2>
+          <ul>
+            <li><b class="sw sw-node"></b><span><em>肉瘤</em>受控节点（一台运行智能体的计算机）；起伏呼吸 = 智能体运行中</span></li>
+            <li><b class="sw sw-relay"></b><span><em>孔穴巢丘</em>公网中继服务器</span></li>
+            <li><b class="sw sw-core"></b><span><em>暗红心脏</em>控制核心，经选举沿管道在节点间迁移</span></li>
+            <li><b class="sw sw-p2p"></b><span><em>对称肌腱</em>点对点连接（双向）</span></li>
+            <li><b class="sw sw-cs"></b><span><em>渐细触手</em>客户端 → 服务器，纹路朝服务器蠕动</span></li>
+            <li><b class="sw sw-bw"></b><span><em>粗细</em>可用带宽</span></li>
+            <li><b class="sw sw-pulse"></b><span><em>青色光脉冲</em>可用性探测，定时扫过所有连接与节点</span></li>
+            <li><b class="sw sw-data"></b><span><em>蠕动鼓包</em>正在传输的数据</span></li>
+            <li><b class="sw sw-down"></b><span><em>干瘪 / 断裂</em>连接劣化 / 中断，随后会重新生长</span></li>
+            <li><b class="sw sw-gfw"></b><span><em>橙色晶格</em>GFW 拦截（流量改走点对点中继）</span></li>
+          </ul>
+        </aside>
+
+        <nav id="actions">
+          <button data-act="probe"><b>◉</b>探测脉冲</button>
+          <button data-act="elect"><b>♥</b>发起选举</button>
+          <button data-act="burst"><b>⇄</b>数据洪流</button>
+          <button data-act="snap"><b>✂</b>扯断连接</button>
+          <button data-act="gfw"><b>▦</b>GFW 封锁</button>
+          <button data-act="node"><b>⏻</b>节点掉线</button>
+          <button data-act="legend" class="ghost"><b>?</b>图例</button>
+        </nav>
+      </div>
+
+      <div id="veil"><span>正在唤醒沉睡之物……</span></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
