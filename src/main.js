@@ -12,6 +12,12 @@ function boot() {
   const q = pickQuality();
   const sim = new Simulation({ nodes: NODES, links: LINKS, coreHost: CORE_HOST });
   const stage = new Stage(canvas, q);
+  // 渲染层发现的问题（着色器编译失败、黑屏自动降级、上下文丢失）显示在标题下方
+  const alertEl = document.getElementById('alert');
+  stage.onProblem = (msg) => {
+    alertEl.hidden = !msg;
+    alertEl.textContent = msg;
+  };
   const world = new World(stage, sim, q);
   const hud = new Hud(document.getElementById('hud'), sim, world, stage);
 

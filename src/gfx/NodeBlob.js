@@ -30,8 +30,8 @@ ${NOISE}
 vec3 yNodeP(vec3 n, out float nod) {
   float lob = yFbm(n * 1.5 + uSeed + vec3(0.0, uTime * 0.045, 0.0)) - 0.45;
   float w = yWorley(n * mix(2.7, 3.5, uServer) + uSeed * 1.37 + vec3(0.0, uTime * 0.02, 0.0));
-  float bumps = smoothstep(0.62, 0.06, w);   // 结节 / 脓疱
-  float pits = smoothstep(0.34, 0.03, w);    // 公网中继：孔穴
+  float bumps = 1.0 - smoothstep(0.06, 0.62, w);   // 结节 / 脓疱
+  float pits = 1.0 - smoothstep(0.03, 0.34, w);    // 公网中继：孔穴
   float h = lob * 0.52;
   h += mix(bumps * (0.25 + 0.06 * uBreath), 0.07 - pits * 0.24, uServer);
   h += uBreath * 0.085 + uGulp * 0.11;
@@ -39,7 +39,7 @@ vec3 yNodeP(vec3 n, out float nod) {
   h += (1.0 - uVital) * (wr * 0.24 - 0.22);  // 掉线：干瘪起皱
   nod = mix(bumps, 1.0 - pits, uServer);
   vec3 p = n * (1.0 + h);
-  float skirt = smoothstep(0.05, -0.75, n.y); // 底部向外摊开，融进菌毯
+  float skirt = 1.0 - smoothstep(-0.75, 0.05, n.y); // 底部向外摊开，融进菌毯
   p.xz *= 1.0 + skirt * 0.55;
   return p;
 }
@@ -86,12 +86,14 @@ ${BUMP}
 `;
 
 const FRAG_COLOR = /* glsl */ `
+// 插值（尤其是 MSAA 下的外推）会让 varying 略微越界；先钳住，否则下面的 pow 在桌面显卡上会得到 NaN
+float yNod = clamp(vNod, 0.0, 1.0);
 float yM = yFbm(vDir * 2.3 + uSeed * 2.0);
 float yVein = yVeins(vDir * 3.3 + uSeed * 3.1 + vec3(0.0, uTime * 0.015, 0.0), 8.0);
 float yFine = yNoise(vDir * 24.0 + uSeed);
 float yMid = yNoise(vDir * 10.0 + uSeed * 0.7);
 vec3 yBase = mix(uColA, uColB, smoothstep(0.3, 0.7, yM));
-yBase = mix(yBase, uColTip, pow(vNod, 2.4) * mix(0.8, 0.55, uServer));
+yBase = mix(yBase, uColTip, pow(yNod, 2.4) * mix(0.8, 0.55, uServer));
 yBase *= 0.7 + 0.6 * yFine;
 yBase *= 1.0 - 0.5 * yVein;
 float yGrey = dot(yBase, vec3(0.3333));
@@ -100,7 +102,7 @@ diffuseColor.rgb = yBase;
 `;
 
 const FRAG_ROUGH = /* glsl */ `
-roughnessFactor = mix(0.26, 0.6, yM) - vNod * 0.12 * (1.0 - uServer);
+roughnessFactor = mix(0.26, 0.6, yM) - yNod * 0.12 * (1.0 - uServer);
 roughnessFactor = mix(0.9, roughnessFactor, uVital);
 `;
 
@@ -126,8 +128,9 @@ const FRAG_EMISSIVE = /* glsl */ `
   for (int i = 0; i < 2; i++) {
     float tt = uFlashT[i];
     float d = acos(clamp(dot(yD, uFlashDir[i]), -1.0, 1.0)) / PI;
-    float band = exp(-pow((d - tt) / 0.13, 2.0)) * step(0.0, tt) * (1.0 - smoothstep(0.85, 1.25, tt));
-    yE += uFlashCol[i] * band * (0.03 + 0.7 * yVein + 0.05 * vNod);
+    float q = (d - tt) / 0.13;
+    float band = exp(-q * q) * step(0.0, tt) * (1.0 - smoothstep(0.85, 1.25, tt));
+    yE += uFlashCol[i] * band * (0.03 + 0.7 * yVein + 0.05 * yNod);
   }
   yE += uColData * uGulp * (0.03 + 0.25 * yVein);
   totalEmissiveRadiance += yE * uVital;

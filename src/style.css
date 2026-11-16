@@ -133,6 +133,22 @@ body {
   color: #ff6a5a;
 }
 
+#alert {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  max-width: 540px;
+  border: 1px solid rgba(255, 179, 71, 0.5);
+  border-radius: 3px 10px 3px 10px;
+  background: rgba(22, 13, 4, 0.88);
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1.6;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------ 节点标签 */
 .tag {
   position: absolute;

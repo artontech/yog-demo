@@ -13,7 +13,7 @@ export function makeSky(shared) {
       void main() {
         vDir = position;
         vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        gl_Position = p.xyww;
+        gl_Position = vec4(p.xy, p.w * 0.99995, p.w); // 贴着远裁剪面，但不恰好压在上面
       }
     `,
     fragmentShader: /* glsl */ `
@@ -30,7 +30,8 @@ export function makeSky(shared) {
         float n = yFbm(d * 2.6 + vec3(0.0, uTime * 0.012, uTime * 0.008));
         float n2 = yFbm(d * 5.0 - vec3(uTime * 0.01, 0.0, 0.0));
         col += vec3(0.012, 0.034, 0.032) * haze * (0.4 + 1.2 * n);
-        col += vec3(0.03, 0.012, 0.045) * pow(n * n2 * 1.9, 2.0) * smoothstep(0.02, 0.5, h);
+        float wisp = n * n2 * 1.9;
+        col += vec3(0.03, 0.012, 0.045) * wisp * wisp * smoothstep(0.02, 0.5, h);
         gl_FragColor = vec4(col, 1.0);
       }
     `,

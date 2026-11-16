@@ -106,7 +106,9 @@ vec3 yBump(vec3 N, vec3 P, float h, float k) {
   vec3 r2 = cross(N, dpx);
   float det = dot(dpx, r1);
   vec3 g = sign(det) * (hx * r1 + hy * r2);
-  return normalize(abs(det) * N - k * g);
+  vec3 v = abs(det) * N - k * g;
+  float l = dot(v, v);
+  return l > 1e-24 ? v * inversesqrt(l) : N; // 导数退化时退回原法线，避免 normalize(0)
 }
 `;
 
@@ -137,6 +139,8 @@ export function patchMaterial(material, spec) {
     after('roughnessmap_fragment', spec.fragmentRoughness);
     after('normal_fragment_maps', spec.fragmentNormal);
     after('emissivemap_fragment', spec.fragmentEmissive);
+    // 兜底：输出钳到有限的非负范围。哪怕某处算出 NaN / 极大值，也只坏一个像素，不会被辉光扩散成整片黑
+    after('fog_fragment', 'gl_FragColor.rgb = min(max(vec3(0.0), gl_FragColor.rgb), vec3(64.0));');
     shader.fragmentShader = fs;
   };
   material.customProgramCacheKey = () => spec.key;

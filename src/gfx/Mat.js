@@ -123,7 +123,7 @@ export class Mat {
         float yPust = 0.0;
         #ifndef YOG_LITE
           float yW = yWorley2(yG * 1.2 + yWarp);
-          yPust = smoothstep(0.42, 0.06, yW) * smoothstep(0.3, 0.75, yFld.r + yN1 * 0.25);
+          yPust = (1.0 - smoothstep(0.06, 0.42, yW)) * smoothstep(0.3, 0.75, yFld.r + yN1 * 0.25);
         #endif
         float yHt = yBio * (0.3 + 0.5 * yN1) + yVein * 0.45 + yPust * 0.9 + (1.0 - yBio) * yN2 * 0.1;
         vec3 yRock = vec3(0.011, 0.014, 0.015) * (0.55 + 0.9 * yN2);

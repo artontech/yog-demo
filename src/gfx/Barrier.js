@@ -41,7 +41,8 @@ void main() {
   float e = min(vBary.x, min(vBary.y, vBary.z));
   float edge = 1.0 - smoothstep(0.0, 0.055, e);
   float inner = 1.0 - smoothstep(0.0, 0.3, e);
-  float fres = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
+  float fb = max(1.0 - abs(dot(normalize(vN), normalize(vV))), 0.0);
+  float fres = fb * fb;
   float flick = 0.8 + 0.2 * sin(uTime * 17.0) * sin(uTime * 5.3);
   float a = (edge * 1.5 + inner * 0.16 + fres * 0.3) * flick;
   vec3 col = uColor * a * (0.6 + 1.1 * uHit) + vec3(1.0, 0.85, 0.6) * edge * uHit * 0.3;

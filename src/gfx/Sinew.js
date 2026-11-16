@@ -99,7 +99,7 @@ vec3 yCenter(float t, float hf, float strand) {
   if (strand > 0.5) {
     // 缠绕在主干外的粘丝
     vec3 T = normalize(yBezD(t));
-    vec3 N = normalize(cross(vec3(0.0, 1.0, 0.0), T));
+    vec3 N = normalize(cross(vec3(0.0, 1.0, 0.0), T) + vec3(1e-5, 0.0, 0.0));
     vec3 B = cross(T, N);
     float a = strand * 2.4 + uSeed * 6.283 + t * (4.0 + strand * 1.3) + uTime * 0.12;
     float env = pow(max(sin(3.14159 * t), 0.0), 0.6);
@@ -139,7 +139,8 @@ float yRad(float t, float ang, float hf, float strand, out vec2 bulge) {
   float dTip = (hf < 0.5 ? (uGap.x - t) : (t - uGap.y)) * uLen;
   float tl = 0.22 + r * 2.4;
   float tp = sqrt(clamp(dTip / tl, 0.0, 1.0));
-  float drop = exp(-pow((dTip - 0.14 - r) / 0.17, 2.0)) * (0.5 * R + 0.02);
+  float dq = (dTip - 0.14 - r) / 0.17;
+  float drop = exp(-dq * dq) * (0.5 * R + 0.02);
   r = mix(r, (r + drop) * tp, open);
   return r;
 }
@@ -153,7 +154,7 @@ vec3 yC0 = yCenter(yT, aHalf, yStr);
 vec3 yDd = yCenter(yT + 0.012, aHalf, yStr) - yCenter(yT - 0.012, aHalf, yStr);
 float yDl = max(length(yDd), 1e-5);
 vec3 yTan = yDd / yDl;
-vec3 yNn = normalize(cross(vec3(0.0, 1.0, 0.0), yTan));
+vec3 yNn = normalize(cross(vec3(0.0, 1.0, 0.0), yTan) + vec3(1e-5, 0.0, 0.0));
 vec3 yBn = cross(yTan, yNn);
 vec2 yBg;
 vec2 yBgT;
@@ -189,17 +190,18 @@ varying vec2 vBulge;
 varying float vTipD;
 ${NOISE}
 ${BUMP}
-float yBandF(float x) { return smoothstep(0.0, 0.07, x) * smoothstep(0.34, 0.07, x); }
+float yBandF(float x) { return smoothstep(0.0, 0.07, x) * (1.0 - smoothstep(0.07, 0.34, x)); }
 `;
 
 const FRAG_COLOR = /* glsl */ `
+vec2 yBu = max(vBulge, vec2(0.0)); // 插值可能略微越界，钳到非负
 vec2 yCs = vec2(cos(vAng), sin(vAng));
 float yFib = yNoise(vec3(vT * uLen * 0.7 + uSeed * 9.0, yCs * 2.6));
 float yFib2 = yNoise(vec3(vT * uLen * 2.4, yCs * 7.0 + uSeed));
 vec3 yCol = uColBody * (0.55 + 0.95 * yFib);
 // 鼓包把表皮撑薄
-yCol = mix(yCol, vec3(0.085, 0.11, 0.04), clamp(vBulge.x * 0.55, 0.0, 0.55));
-yCol = mix(yCol, vec3(0.2, 0.012, 0.012), clamp(vBulge.y * 0.9, 0.0, 0.9));
+yCol = mix(yCol, vec3(0.085, 0.11, 0.04), clamp(yBu.x * 0.55, 0.0, 0.55));
+yCol = mix(yCol, vec3(0.2, 0.012, 0.012), clamp(yBu.y * 0.9, 0.0, 0.9));
 // 劣化：坏死的灰黄斑
 float yBlot = smoothstep(0.3, 0.7, yNoise(vec3(vT * uLen * 1.6, yCs * 1.5 + uSeed * 3.0)));
 yCol = mix(yCol, vec3(0.2, 0.17, 0.095), (1.0 - uHealth) * (0.25 + 0.75 * yBlot));
@@ -207,7 +209,7 @@ diffuseColor.rgb = yCol;
 `;
 
 const FRAG_ROUGH = /* glsl */ `
-roughnessFactor = mix(0.18, 0.42, yFib2) + (1.0 - uHealth) * 0.42 - (vBulge.x + vBulge.y) * 0.1;
+roughnessFactor = mix(0.18, 0.42, yFib2) + (1.0 - uHealth) * 0.42 - (yBu.x + yBu.y) * 0.1;
 roughnessFactor = clamp(roughnessFactor, 0.08, 1.0);
 `;
 
@@ -237,8 +239,8 @@ const FRAG_EMISSIVE = /* glsl */ `
   float yTip = exp(-max(vTipD, 0.0) * 2.2);
   vec3 yTipCol = mix(vec3(1.0, 0.22, 0.06), uColMark, smoothstep(0.35, 0.7, uHealth));
   yE += yTipCol * yTip * (0.35 + 0.25 * sin(uTime * 5.0 + uSeed * 20.0)) * (0.4 + 0.6 * yFib);
-  yE += uColData * vBulge.x * (0.15 + 0.85 * yFib) * 0.3;
-  yE += vec3(1.0, 0.045, 0.03) * vBulge.y * (0.5 + 1.3 * uBeat) * (0.4 + 0.6 * yFib);
+  yE += uColData * yBu.x * (0.15 + 0.85 * yFib) * 0.3;
+  yE += vec3(1.0, 0.045, 0.03) * yBu.y * (0.5 + 1.3 * uBeat) * (0.4 + 0.6 * yFib);
   totalEmissiveRadiance += yE;
 }
 `;

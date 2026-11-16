@@ -33,13 +33,31 @@ const GradeShader = {
       vec2 off = c * r2 * 0.012;
       vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
       // 暗角：心跳时边缘微微泛红
-      float v = smoothstep(0.95, 0.2, length(c * vec2(min(uAspect, 1.0) * 0.9 + 0.2, 1.0)) * 1.25);
+      float v = 1.0 - smoothstep(0.2, 0.95, length(c * vec2(min(uAspect, 1.0) * 0.9 + 0.2, 1.0)) * 1.25);
       col *= mix(0.22, 1.0, v);
       col += vec3(0.022, 0.001, 0.0) * (1.0 - v) * uPulse;
       // 胶片颗粒
       float g = hash(gl_FragCoord.xy + fract(uTime) * 91.7) - 0.5;
       col += g * 0.012 * (0.4 + col);
-      gl_FragColor = vec4(max(col, 0.0), 1.0);
+      gl_FragColor = vec4(max(vec3(0.0), col), 1.0);
+    }
+  `,
+};
+
+// 辉光之前先把画面钳到有限的非负范围：辉光的大半径模糊会把一个 NaN 像素扩散成一整块黑，
+// 这一步保证即使某个材质在某块显卡上算出了 NaN，也只坏那一个像素
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      gl_FragColor = vec4(min(max(vec3(0.0), c), vec3(64.0)), 1.0);
     }
   `,
 };
@@ -93,6 +111,20 @@ export class Stage {
     renderer.toneMappingExposure = 1.1;
     renderer.setClearColor(PALETTE.fog, 1);
 
+    // 出问题时要让人看得见：着色器在某块显卡上编译失败、上下文丢失，都报到页面上（onProblem 由外部接管）
+    this.onProblem = null;
+    renderer.debug.onShaderError = (gl, program, vs, fs) => {
+      const log = [gl.getProgramInfoLog(program), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs)].filter(Boolean).join('\n');
+      console.error(`着色器编译 / 链接失败：\n${log}`);
+      const first = log.split('\n').find((l) => l.trim()) || '未知错误';
+      this.onProblem?.(`着色器在这块显卡上编译失败，部分模型无法显示：${first.slice(0, 200)}`);
+    };
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.onProblem?.('WebGL 上下文丢失，等待浏览器恢复……');
+    });
+    canvas.addEventListener('webglcontextrestored', () => this.onProblem?.(''));
+
     const scene = (this.scene = new THREE.Scene());
     scene.fog = new THREE.FogExp2(PALETTE.fog, 0.021);
     scene.environment = buildEnvironment(renderer);
@@ -145,11 +177,22 @@ export class Stage {
     const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples });
     const composer = (this.composer = new EffectComposer(renderer, rt));
     composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new ShaderPass(SanitizeShader));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.5, 0.5, 0.85);
     composer.addPass(this.bloom);
     this.grade = new ShaderPass(GradeShader);
     composer.addPass(this.grade);
     composer.addPass(new OutputPass());
+
+    // 黑屏看门狗的状态：0 = 完整后期，1 = 关闭辉光，2 = 关闭全部后期，3 = 仍然全黑
+    this.safeLevel = 0;
+    this.dogTimer = 1.5;
+    this.dogAge = 0;
+    this.dogHits = 0;
+    const probe = document.createElement('canvas');
+    probe.width = 24;
+    probe.height = 14;
+    this.dogCtx = probe.getContext('2d', { willReadFrequently: true });
 
     this.scale = 1; // 自适应分辨率系数
     this.fpsAcc = 0;
@@ -239,7 +282,57 @@ export class Stage {
     this.controls.update(dt);
     this.grade.uniforms.uTime.value = time;
     this.grade.uniforms.uPulse.value = beat;
-    this.composer.render(dt);
+    if (this.safeLevel >= 2) this.renderer.render(this.scene, this.camera);
+    else this.composer.render(dt);
+    this._watchdog(dt);
     this._adapt(dt);
+  }
+
+  /**
+   * 黑屏看门狗。正常画面里永远有胶片颗粒和地面的微光，不会出现“大面积纯黑”；
+   * 如果采样到的像素几乎全是 (0,0,0)，说明这块显卡上有东西算坏了（典型情况是 NaN 被后期放大）。
+   * 这时逐级关闭后期让模型先显示出来，并把情况报到页面上，而不是无声无息地黑着。
+   */
+  _watchdog(dt) {
+    if (this.safeLevel >= 3) return;
+    this.dogTimer -= dt;
+    this.dogAge += dt;
+    if (this.dogTimer > 0) return;
+    // 开场密一些（问题通常一开始就出现），之后放慢
+    this.dogTimer = this.dogHits > 0 ? 0.4 : this.dogAge < 20 ? 2.5 : 6;
+    if (this.renderer.getContext().isContextLost()) return;
+    // 把刚画完的这一帧缩印到一张很小的 2D canvas 上再读回来。
+    // 不直接用 gl.readPixels：那会让驱动在控制台里刷“GPU stall”性能警告
+    const ctx = this.dogCtx;
+    const W = ctx.canvas.width;
+    const H = ctx.canvas.height;
+    let data;
+    try {
+      ctx.drawImage(this.canvas, 0, 0, W, H);
+      data = ctx.getImageData(0, 0, W, H).data;
+    } catch {
+      return;
+    }
+    let black = 0;
+    const total = W * H;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] + data[i + 1] + data[i + 2] === 0) black++;
+    }
+    if (black < total * 0.9) {
+      this.dogHits = 0;
+      return;
+    }
+    if (++this.dogHits < 2) return;
+    this.dogHits = 0;
+    this.safeLevel++;
+    if (this.safeLevel === 1) {
+      this.bloom.enabled = false;
+      this.onProblem?.('检测到画面全黑，已自动关闭辉光（显卡兼容模式）。如果方便，请把浏览器和显卡型号反馈给开发者。');
+    } else if (this.safeLevel === 2) {
+      this.onProblem?.('检测到画面全黑，已自动关闭全部后期效果（显卡兼容模式）。如果方便，请把浏览器和显卡型号反馈给开发者。');
+    } else {
+      this.onProblem?.('画面仍然全黑：这块显卡或浏览器可能不兼容。请打开控制台查看报错，并把浏览器和显卡型号反馈给开发者。');
+    }
+    console.warn(`[yog] 黑屏看门狗触发，兼容级别 → ${this.safeLevel}`);
   }
 }
